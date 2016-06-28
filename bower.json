@@ -1,0 +1,22 @@
+{
+  "name": "motto_lightwallet",
+  "description": "",
+  "main": "",
+  "license": "MIT",
+  "homepage": "",
+  "ignore": [
+    "**/.*",
+    "node_modules",
+    "bower_components",
+    "test",
+    "tests"
+  ],
+  "dependencies": {
+    "jquery": "^3.1.0",
+    "xpull": "*",
+    "jquery-qrcode": "lrsjng/jquery-qrcode#^0.14.0",
+    "qcode-decoder": "^0.1.0",
+    "tweetnacl": "^0.14.3",
+    "cryptojslib": "^3.1.2"
+  }
+}

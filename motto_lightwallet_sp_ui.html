@@ -1,0 +1,532 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>NEM もっとlightwallet</title>
+<link rel="stylesheet" type="text/css" href="xpull.css">
+<style>
+body {
+margin:0;
+padding:0;
+-webkit-text-size-adjust: 100%;
+}
+#txhistory tr:nth-child(4n+3),
+#txhistory tr:nth-child(4n+4) {
+background: #D8D8D8;
+}
+#headinfo{
+position: fixed;
+top: 0;
+left: 0;
+height: 2em;
+line-height: 2em;
+background-color: #34b7af;
+color: #fff;
+width: 100%;
+overflow: auto;
+z-index:999;
+}
+#closebutton{
+position: absolute;
+top: 0;
+right: 0;
+width: 2em;
+height: 2em;
+line-height: 2em;
+text-align: center;
+background-color: #fabe00;
+}
+.button{
+position: absolute;
+right: 0;
+padding: 0 1em;
+height: 2em;
+font-weight: bold;
+display: inline-block;
+text-align: center;
+background-color: #fabe00;
+cursor: pointer;
+}
+.refreshbutton{
+position: absolute;
+right: calc(4em + 2px);
+padding: 0 1em;
+height: 2em;
+font-weight: bold;
+display: inline-block;
+text-align: center;
+background-color: #fabe00;
+cursor: pointer;
+}
+.table_nowrap{
+white-space: nowrap;
+}
+.table_input_variable{
+width: 100%;
+box-sizing: border-box;
+}
+.head{
+font-size: 1.5em;
+font-weight: bold;
+margin:0.25em 0px;
+}
+
+
+
+.over-range {
+  /* Dimension */
+  width: 64px;
+  height: 94px;
+
+  /* Fixed position */
+  position: fixed;
+  left: 40%;
+  top: 0px;
+
+  /* Centered horizontally, and hidden above screen */
+  margin: 0 auto;
+  margin-top: -94px;
+}
+#account_status_address{
+text-decoration: underline;
+color:#00f;
+}
+#account_status_address:hover{
+color:#f00;
+}
+</style>
+<script src="./bower_components/jquery/dist/jquery.min.js"></script>
+<script src="./bower_components/cryptojslib/components/core-min.js"></script>
+<script src="./bower_components/cryptojslib/components/x64-core-min.js"></script>
+<script src="./bower_components/cryptojslib/components/sha3-min.js"></script>
+<script src="./bower_components/cryptojslib/components/ripemd160-min.js"></script>
+<script src="./bower_components/tweetnacl/nacl-fast.min.js"></script>
+<script src="./bower_components/xpull/xpull.js"></script>
+<script src="./bower_components/qcode-decoder/build/qcode-decoder.min.js"></script>
+<script src="./bower_components/jquery-qrcode/dist/jquery-qrcode.min.js"></script>
+<script src="main.js"></script>
+<script src="KeyPair.js"></script>
+<script src="util.js"></script>
+<script>
+function showrefreshbutton(){
+if(touchDevice = (typeof window.ontouchstart) === 'undefined')document.getElementById('reloadbutton').style.display = "";
+$('#content').xpull({
+  'callback':function(){
+   refresh();
+  }
+});
+}
+</script>
+<script>
+var address;
+var TXHistory = [];
+var SERVER_ROOT_URL;
+var network = 104;
+var login_type = "address";
+var NEM_SERVER_LIST = ["85.25.36.97", "85.25.36.92", "199.217.112.135", "108.61.182.27", "108.61.168.86", "104.238.161.61", "62.75.171.41", "san.nem.ninja"];
+
+function infomessage(x) {
+	document.getElementById("info_message").innerHTML = x;
+}
+function toggleSendform(){
+	if(document.getElementById('send').style.display == "none"){
+		document.getElementById('sendbutton').style.display = "none";
+		document.getElementById('send').style.display = "";
+	}else{
+		document.getElementById('sendbutton').style.display = "";
+		document.getElementById('send').style.display = "none";
+	}
+}
+function GetQueryString() {
+	var param = {};
+	var pairs = location.hash.slice(1).split('&');
+	for (var i = 0; i < pairs.length; ++i) {
+		var pair = pairs[i].split('=');
+		param[pair[0]] = pair[1];
+	}
+	return param;
+}
+function login_type_select() {
+	if (document.forms.loginform.login_type.checked) {
+		login_type = "password"
+		document.getElementById('login_type_pass').style.display = "";
+		document.getElementById("login_type_addr").style.display = "none";
+	} else {
+		login_type = "address"
+		document.getElementById("login_type_pass").style.display = "none";
+		document.getElementById("login_type_addr").style.display = "";
+	}
+}
+function server_address_set(){
+	var random = NEM_SERVER_LIST[Math.floor(Math.random() * NEM_SERVER_LIST.length)];
+	SERVER_ROOT_URL = "http://" + random + ":7890";
+	infomessage("アドレスを " + SERVER_ROOT_URL + " に設定しました。");
+	refresh();
+}
+
+function sendTransferRequest() {
+	var amount = document.getElementById("amount").value;
+	var message = document.getElementById("message").value ? string_to_utf8_hex_string(document.getElementById("message").value) : "";
+	var msgFee = message.length ? Math.max(1, Math.floor(message.length / 2 / 16)) * 2 : 0;
+	var fee = CALC_MIN_FEE(amount) + msgFee;
+	var toaddr = Address.format(document.getElementById("toaddr").value);
+	var result = confirm(toaddr + "\nに " + amount + "XEM 送金します。\n手数料は " + fee + "XEM 掛かります。\n本当によろしいですか？");
+	if (result) {
+		var privkey = calcPrivkey(document.getElementById("pass").value);
+		if(Address.format(Address.getaddress(privkey, network)) != address){
+			SENDER_PRIVATE_KEY = "";
+			alert("入力パスワードがログイン中のアドレスと対応しません。パスワードを確認してください。");
+			infomessage("入力パスワードがログイン中のアドレスと対応しません。パスワードを確認してください。");
+			return false;
+		}
+		sendAjaxTransferRequest(amount, privkey, message, toaddr).done(function(data) {
+			if(data.message != "SUCCESS"){
+				alert("送金失敗");
+			}else{
+				infomessage("送金しました。");
+			}
+			toggleSendform();
+			refresh();
+		});
+	}
+}
+function getAccountStatus(){
+	GetRequest("/account/get?address=" + address).done(function(data) {
+		document.getElementById('account_status_address').innerHTML = Address.formatfordisplay(data.account.address);
+		[].forEach.call(document.getElementsByClassName('account_status_balance'), function(e){e.innerHTML = data.account.balance * 0.000001 + " XEM"});
+		document.getElementById('account_status_importance').innerHTML = data.account.importance;
+	});
+}
+function getTXHistory(){
+	GetRequest("/account/transfers/all?address=" + address).done(function(data) {
+		var TXHistorytable = document.getElementById('txhistory');
+		while( TXHistorytable.rows[2] ) TXHistorytable.deleteRow(2);
+		for (var i = 0;i < data["data"].length;i++) {
+			var txpath = data["data"][i]["transaction"];
+			TXHistory[TXHistory.length] = new Array(data["data"][i]["meta"]["height"], txpath["signature"]);
+			var type = txpath["type"];
+			var row = TXHistorytable.insertRow( -1 );
+			var row2 = TXHistorytable.insertRow( -1 );
+			var c1 = row.insertCell(-1);
+			var c2 = row2.insertCell(-1);
+			var c3 = row2.insertCell(-1);
+			var c4 = row2.insertCell(-1);
+			var c5 = row.insertCell(-1);
+			var c6 = row.insertCell(-1);
+			var c7 = row.insertCell(-1);
+			c1.innerHTML = toLocaltime(txpath.timeStamp);
+			c2.innerHTML = Address.cut(Address.toAddress(txpath["signer"], network));
+			c3.innerHTML = type === 2049 ? txpath.mode === 1 ? "Activate" : "Deactivate" 
+				     : type === 4097 || type === 4098 ? "multisig"
+				     : type === 8193 ? "namespace"
+				     : type === 16385 ? "mosaic作成"
+				     : type === 16386 ? "mosaic変更"
+				     : "送金";
+			c4.innerHTML = type === 2049 ? txpath["mode"] === 1 ? Address.cut(Address.toAddress(txpath.remoteAccount, network)) : "無効化" 
+				     : type === 4097 ? "multisig集約修正転送" 
+				     : type === 4098 ? "multisig署名" 
+				     : type === 8193 ? "規定の名前空間"
+				     : type === 16385 ? "mosaic定義作成"
+				     : type === 16386 ? "mosaicサプライ変更"
+				     : Address.cut(Address.formatfordisplay(txpath.recipient));
+			c5.innerHTML = typeof txpath.message != "undefined" && typeof txpath.message.payload != "undefined" 
+			? txpath.message.type === 1 ? "有" : "暗号化されています" : "";
+			c6.innerHTML = type === 2049 || type === 4097 ? "-" : txpath.amount * 0.000001;
+			c7.innerHTML = "表示";
+			c7.style.cursor = "pointer";
+			c7.setAttribute("rowSpan", "2");
+			c7.setAttribute("onclick", "ShowTxDetail(" + (TXHistory.length - 1) +  ");");
+		}
+	});
+
+}
+function gettxdetail(hash){
+	GetRequest("/chain/height").done(function(data) {
+		document.getElementById("server_info").innerHTML = SERVER_ROOT_URL + " - height:" + data["height"];
+	});
+}
+function ShowTxDetail(num){
+	PostRequest("/block/at/public", {"height": TXHistory[num][0]}).done(function(data) {
+		for(var i = 0;i < data["transactions"].length;i++){
+			if(data["transactions"][i]["signature"] === TXHistory[num][1]){
+				var txdata = data["transactions"][i];
+				break;
+			}
+		}
+		var type = txdata["type"];
+		document.getElementById("txdetail_time").innerHTML = toLocaltime(txdata.timeStamp);
+		document.getElementById("txdetail_block").innerHTML = TXHistory[num][0];
+		document.getElementById("txdetail_fee").innerHTML = txdata.fee * 0.000001;
+		document.getElementById("txdetail_signer").innerHTML = Address.toAddress(txdata["signer"], network);
+		/*c3.innerHTML = type === 2049 ? txdata.mode === 1 ? "→ 委任収穫有効化" : "→ 委任収穫無効化"
+			     : type === 4097 || type === 4098 ? "→ multisig"
+			     : type === 8193 ? "→ namespace"
+			     : type === 16385 ? "→ mosaic作成"
+			     : type === 16386 ? "→ mosaic変更"
+			     : "→ 送金";*/
+		document.getElementById("txdetail_address").innerHTML = type === 2049 ? txdata["mode"] === 1 ? Address.toAddress(txdata.remoteAccount, network) : "無効化" 
+			     : type === 4097 ? "multisig集約修正転送" 
+			     : type === 4098 ? "multisig署名" 
+			     : type === 8193 ? "規定の名前空間"
+			     : type === 16385 ? "mosaic定義作成"
+			     : type === 16386 ? "mosaicサプライ変更"
+			     : Address.formatfordisplay(txdata.recipient);
+		document.getElementById("txdetail_message").innerHTML = typeof txdata.message != "undefined" && typeof txdata.message.payload != "undefined" ?
+									txdata.message.type === 1 ? fmtHexToUtf8(txdata.message.payload) : "暗号化されています" : "";
+		document.getElementById("txdetail_amount").innerHTML = type === 2049 || type === 4097 ? "-" : txdata.amount * 0.000001;
+		document.getElementById("txDetail").style.display = '';	
+	}).fail(function(data){
+		infomessage("取得できなかった(´・ω・｀)");
+	});
+}
+function getserverinfo(){
+	GetRequest("/chain/height").done(function(data) {
+		document.getElementById("server_info").innerHTML = SERVER_ROOT_URL + " - height:" + data["height"];
+	});
+}
+function refresh(){
+	getserverinfo();
+	getAccountStatus();
+	getTXHistory();
+}
+function login(x) {
+	infomessage("ログイン中...");
+	if (login_type === "address" || x !== undefined) {
+		var addr = x === undefined ? document.getElementById('login_type_addr_value').value : x;
+		addr = Address.format(addr);
+		if (!Address.isValid(addr)) {
+			infomessage("アドレスが未入力または不正です。");
+			return;
+		}
+
+	} else if (login_type === "password") {
+		var pass = document.getElementById('login_type_pass_value').value;
+		if(pass === null || pass === ""){
+			infomessage("パスワードが未入力です。");
+			return;
+		}
+		var addr = Address.format(Address.getaddress(calcPrivkey(pass), network));
+		if (!Address.isValid(addr)) {
+			infomessage("エラー");
+			return;
+		}
+	}
+	address = addr;
+	document.getElementById("login").style.display = "none";
+	document.getElementById("main").style.display = "";
+	document.getElementById("sendbutton").style.display = "";
+	server_address_set();
+	infomessage("ログインしました");
+	$('#QRcode').qrcode({render: 'image', size: 500, text:  Address.formatfordisplay(address)});
+	document.getElementById('QRcode').firstChild.style.height = document.getElementById('QRcode').style.height;
+	document.getElementById('QRcode').firstChild.style.width = document.getElementById('QRcode').style.width;
+	showrefreshbutton();
+}
+$(function() {
+	var query = GetQueryString();
+	if ("address" in query) {
+		if (Address.isValid(query["address"])) login(query["address"]);
+		location.hash = "";
+	}
+});
+</script>
+<script>//QR読み取り
+function readQR(files) {
+  document.getElementById("QRinfo").innerHTML = "読み取っています...";
+  var file = files[0];
+  fileReader = new FileReader(); 
+  fileReader.onload = function(event) {
+    ImgResizeB_a_W(event.target.result, function(img_b64) {
+      QCodeDecoder().decodeFromImage(img_b64, function(err, res){
+        if(res && Address.isValid(res)){
+          document.getElementById("QRinfo").innerHTML = "読取結果:" + res;
+          document.getElementById("toaddr").value = res;
+        }else{
+          document.getElementById("QRinfo").innerHTML = "読めなかった(´・ω・｀)";
+        }
+      });
+    });
+  };
+  fileReader.readAsDataURL(file);
+}
+function ImgResizeB_a_W(imgB64_src, callback) {
+    var img_type = imgB64_src.substring(5, imgB64_src.indexOf(";"));
+    var img = new Image();
+    img.src = imgB64_src;
+    img.onload = function() {
+        if(this.height < this.width){
+          var width = 1024;
+          var height = this.height * (width / this.width);
+        }else{
+          var height = 1024;
+          var width = this.width * (height / this.height);
+        }
+        var canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height; 
+        var ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, width, height);
+        var src = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        var dst = ctx.createImageData(canvas.width, canvas.height);
+        for (var i = 0; i < src.data.length; i=i+4) {
+          var pixel = parseInt(src.data[i].toString(16) + src.data[i+1].toString(16) + src.data[i+2].toString(16), 16);
+          if(5263440 > pixel){
+            dst.data[i] = dst.data[i+1] = dst.data[i+2] = 0;
+          }else{
+            dst.data[i] = dst.data[i+1] = dst.data[i+2] = 255;
+          }
+         dst.data[i+3] = src.data[i+3];
+        }
+        ctx.putImageData(dst, 0, 0);
+        var imgB64_dst = canvas.toDataURL(img_type);
+        callback(imgB64_dst);
+    };
+}
+</script>
+<script>
+function showQRcode(){
+  var showaddress = Address.formatfordisplay(address);
+  document.getElementById('QRaddress').innerHTML = showaddress;
+  document.getElementById('QRshow').style.display = '';
+}
+</script>
+</head>
+<body>
+<div id="headinfo">
+  残高: <span class="account_status_balance">-</span>
+  <span class="refreshbutton" id="reloadbutton" onclick="refresh();" style="display:none;">更新</span>
+  <span class="button" id="sendbutton" onclick="toggleSendform();" style="display:none;">送金</span>
+</div>
+<div style="width:100%;height: 2em;"></div>
+<div id="content">
+<div style="font-size:20px;margin:10px 0;">
+  インフォメーション:<span id="info_message">ようこそ</span>
+</div>
+<div id="login">
+  <h2>ログイン</h2>
+  <form id="loginform" name="loginform">
+  <p>このウォレットはJavascriptで書かれており、クライアントサイドで動きます。パスワードや秘密鍵が別のところへ送信されることはありません。</p>
+  <p>このウォレットはTakanobu氏の<a href="https://github.com/mediaprogramer/mijin-SimpleTransfer">mijin-SimpleTransfer</a>を魔改造して作られました。Takanobu氏にこの場でお礼を申し上げます。</p>
+    <p>このウォレットの簡単な説明は<a href="index.html">こちら</a>。望ましいパスワードの説明もありますので使用前にざっと目を通しておくことをおすすめします。</p>
+    
+    <table style="width: 100%;">
+      <tr>
+        <td class="table_nowrap">パスワードでログイン</td>
+        <td><input id="login_type" onclick="login_type_select();" type="checkbox"></td>
+      </tr>
+      <tr id="login_type_addr">
+        <td class="table_nowrap">アドレス</td>
+        <td><input id="login_type_addr_value" class="table_input_variable" type="text"></td>
+      </tr>
+      <tr id="login_type_pass" style="display:none;">
+        <td class="table_nowrap">パスワード</td>
+        <td><input id="login_type_pass_value" class="table_input_variable" type="password"></td>
+      </tr>
+    </table>
+  </form><button onclick="login();" style="width:10em;height:5em;">login</button>
+</div>
+
+<div id="main" class="scrollable" style="display:none;">
+  <div>
+    <h2>サーバー情報</h2>
+    <div id="server_info"></div>
+  </div>
+  <div>
+    <h2>アカウント情報</h2>
+    <table style="margin:10px 0;">
+      <tr>
+        <td style="white-space: nowrap;">アドレス</td>
+        <td id="account_status_address" onclick="showQRcode();"></td>
+      </tr>
+      <tr>
+        <td>残高</td>
+        <td class="account_status_balance"></td>
+      </tr>
+      <tr>
+        <td>重要度</td>
+        <td id="account_status_importance"></td>
+      </tr>
+    </table>
+  </div>
+  <div style="margin:10px 0;">
+    <h2>取引履歴</h2>
+    <table border="1" cellpadding="5" cellspacing="0" id="txhistory" style="width:100%">
+      <tr>
+        <th>時間</th>
+        <th>メッセージ</th>
+        <th>金額</th>
+        <th rowspan="2" style="width:1em;">詳細</th>
+      </tr>
+      <tr>
+        <th>送信者</th>
+        <th>→</th>
+        <th>受信者</th>
+      </tr>
+    </table>
+  </div>
+</div>
+</div>
+<div id="txDetail" style="display: none;position: fixed;top: 2em;left: 0;width: 100%;height: calc(100% - 2em);background-color: #86c0e9;z-index: 1;color:#FFF">
+  <div class="head">トランザクション情報</div>
+  <div id="closebutton" onclick="document.getElementById('txDetail').style.display = 'none';">×</div>
+  <div style="font-size:1.2em;">金額:<span id="txdetail_amount"></span></div>
+  <div id="txdetail_signer" style="word-break: break-all"></div>
+  ↓
+  <div id="txdetail_address" style="word-break: break-all"></div>
+  <table style="margin:10px 0;">
+    <tr>
+      <td>手数料</td>
+      <td id="txdetail_fee"></td>
+    </tr>
+    <tr>
+      <td style="white-space: nowrap;">メッセージ</td>
+      <td id="txdetail_message"></td>
+    </tr>
+    <tr>
+      <td style="white-space: nowrap;">時間</td>
+      <td id="txdetail_time"></td>
+    </tr>
+    <tr>
+      <td style="white-space: nowrap;">ブロック</td>
+      <td id="txdetail_block"></td>
+    </tr>
+  </table>
+</div>
+<div id="QRshow" style="display: none;position: fixed;top: 2em;left: 0;width: 100%;height: calc(100% - 2em);background-color: #FFF;z-index: 3;">
+  <div class="head">アドレスQRコード</div>
+  <div id="closebutton" onclick="document.getElementById('QRshow').style.display = 'none';">×</div>
+  <div id="QRcode" style="max-height:1000px;max-width:1000px;height:80vmin;width:80vmin;margin:0 calc(calc(100% - 80vmin) / 2);"></div>
+  <div id="QRaddress" style="text-align:center;"></div>
+</div>
+<div id="send" style="display: none;position: fixed;top: 2em;left: 0;width: 100%;height: calc(100% - 2em);background-color: #86c0e9;z-index: 2;">
+  <div class="head">送金</div>
+  <div id="closebutton" onclick="toggleSendform();">×</div>
+  <div>
+  ※メッセージは非暗号化のみです。すべての人が内容を知ることができます。
+    <div>
+      <div>アドレスQRコード読取:<input type="file" id="input" onchange="readQR(this.files);"></div>
+      <div id="QRinfo"></div>
+    </div>
+    <table style="width: 100%;">
+      <tr>
+        <td class="table_nowrap">送信先アドレス</td>
+        <td><input id="toaddr" class="table_input_variable" type="text"></td>
+      </tr>
+      <tr>
+        <td class="table_nowrap">金額</td>
+        <td><input id="amount" min="0" name="amount" step="0.000001" class="table_input_variable" type="number"></td>
+      </tr>
+      <tr>
+        <td class="table_nowrap">メッセージ</td>
+        <td><input id="message" min="0" class="table_input_variable" type="text"></td>
+      </tr>
+      <tr>
+        <td class="table_nowrap">パスワード</td>
+        <td><input id="pass" class="table_input_variable" type="password"></td>
+      </tr>
+    </table><button id="btnSend" onclick="sendTransferRequest();">送金</button>
+  </div>
+</div>
+</body>
+</html>
