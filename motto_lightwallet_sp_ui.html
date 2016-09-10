@@ -119,6 +119,8 @@ $('#content').xpull({
 }
 </script>
 <script>
+var pricexemjpy = -1;
+var xembalance = 0;
 var address;
 var TXHistory = [];
 var SERVER_ROOT_URL;
@@ -194,8 +196,13 @@ function sendTransferRequest() {
 function getAccountStatus(){
 	GetRequest("/account/get?address=" + address).done(function(data) {
 		document.getElementById('account_status_address').innerHTML = Address.formatfordisplay(data.account.address);
-		[].forEach.call(document.getElementsByClassName('account_status_balance'), function(e){e.innerHTML = data.account.balance * 0.000001 + " XEM"});
+		xembalance = data.account.balance * 0.000001;
+		[].forEach.call(document.getElementsByClassName('account_status_balance'), function(e){e.innerHTML = xembalance + " XEM"});
 		document.getElementById('account_status_importance').innerHTML = data.account.importance;
+	});
+	getXEMJPY(function(d){
+	  document.getElementById('account_status_balance_jpy').innerHTML = Math.round(d * xembalance * 10000) / 10000;
+	  document.getElementById('price_info_jpy').innerHTML = d;
 	});
 }
 function getTXHistory(){
@@ -275,6 +282,7 @@ function ShowTxDetail(num){
 		document.getElementById("txdetail_message").innerHTML = typeof txdata.message != "undefined" && typeof txdata.message.payload != "undefined" ?
 									txdata.message.type === 1 ? fmtHexToUtf8(txdata.message.payload) : "暗号化されています" : "";
 		document.getElementById("txdetail_amount").innerHTML = type === 2049 || type === 4097 ? "-" : txdata.amount * 0.000001;
+		document.getElementById("txdetail_amount_jpy").innerHTML = type === 2049 || type === 4097 ? "-" : pricexemjpy === -1 ? "取得できませんでした。更新してみてください。":Math.round(txdata.amount * 0.01 * pricexemjpy) / 10000;
 		document.getElementById("txDetail").style.display = '';	
 	}).fail(function(data){
 		infomessage("取得できなかった(´・ω・｀)");
@@ -391,6 +399,19 @@ function showQRcode(){
   document.getElementById('QRshow').style.display = '';
 }
 </script>
+<script>
+function getXEMJPY(callback){
+$.get("https://api.kraken.com/0/public/Ticker?pair=XBTJPY", function(data){//BTC_JPY from kraken
+  var btc_jpy_price = data;
+  $.get("https://poloniex.com/public?command=returnTicker", function(data){//BTC_XEM from poloniex
+    var btc_xem_price = data;
+    pricexemjpy = Math.round(btc_jpy_price["result"]["XXBTZJPY"]["c"][0] * btc_xem_price.BTC_XEM.last * 10000) / 10000;
+    console.log(pricexemjpy);
+    if (typeof(callback) === 'function')callback(pricexemjpy);
+  });
+});
+}
+</script>
 </head>
 <body>
 <div id="headinfo">
@@ -444,10 +465,18 @@ function showQRcode(){
         <td class="account_status_balance"></td>
       </tr>
       <tr>
+        <td>残高(円換算, kraken BTC/JPY * poloniex BTC/XEM)</td>
+        <td><span id="account_status_balance_jpy">取得中...</span> 円</td>
+      </tr>
+      <tr>
         <td>重要度</td>
         <td id="account_status_importance"></td>
       </tr>
     </table>
+  </div>
+  <div>
+    <h2>価格情報</h2>
+    <div><span id="price_info_jpy">取得中...</span> 円(kraken BTC/JPY * poloniex BTC/XEM)</div>
   </div>
   <div style="margin:10px 0;">
     <h2>取引履歴</h2>
@@ -470,7 +499,8 @@ function showQRcode(){
 <div id="txDetail" style="display: none;position: fixed;top: 2em;left: 0;width: 100%;height: calc(100% - 2em);background-color: #86c0e9;z-index: 1;color:#FFF">
   <div class="head">トランザクション情報</div>
   <div id="closebutton" onclick="document.getElementById('txDetail').style.display = 'none';">×</div>
-  <div style="font-size:1.2em;">金額:<span id="txdetail_amount"></span></div>
+  <div style="font-size:1.2em;">金額:<span id="txdetail_amount"></span> XEM</div>
+  <div style="font-size:1.2em;">金額(円換算):<span id="txdetail_amount_jpy"></span> 円</div>
   <div id="txdetail_signer" style="word-break: break-all"></div>
   ↓
   <div id="txdetail_address" style="word-break: break-all"></div>
