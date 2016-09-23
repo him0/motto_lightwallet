@@ -1,10 +1,10 @@
 # motto_lightwallet
 
 ## 必須環境
-+ bower (node.js npm)
++ nodejs
 
 ## 依存関係インスコ
 ```
-$ bower install
+$ npm install
+$ npm run bower install
 ```
-

@@ -1,0 +1,22 @@
+{
+  "name": "motto_lightwallet",
+  "version": "1.0.0",
+  "description": "nem lightwallet created by tomotomo9696",
+  "main": "index.html",
+  "scripts": {
+    "bower": "bower"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tomotomo9696/motto_lightwallet.git"
+  },
+  "author": "tomotomo9696",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/tomotomo9696/motto_lightwallet/issues"
+  },
+  "homepage": "https://github.com/tomotomo9696/motto_lightwallet#readme",
+  "dependencies": {
+    "bower": "^1.7.9"
+  }
+}
